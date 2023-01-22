@@ -11,7 +11,16 @@ public class WhisperParams {
     public static let `default` = WhisperParams(strategy: .greedy)
 
     internal var whisperParams: whisper_full_params
-    internal var _language: UnsafeMutablePointer<CChar>?
+    private var stringPointers: [UnsafeMutablePointer<CChar>] = [] {
+        willSet {
+            // Find removed pointers and free them
+            let removals = stringPointers.filter { !newValue.contains($0) }
+
+            for pointer in removals {
+                free(pointer)
+            }
+        }
+    }
 
     public init(strategy: WhisperSamplingStrategy = .greedy) {
         self.whisperParams = whisper_full_default_params(whisper_sampling_strategy(rawValue: strategy.rawValue))
@@ -19,8 +28,8 @@ public class WhisperParams {
     }
 
     deinit {
-        if let _language {
-            free(_language)
+        for pointer in stringPointers {
+            free(pointer)
         }
     }
 
@@ -34,15 +43,14 @@ public class WhisperParams {
         set {
             guard let pointer = strdup(newValue.rawValue) else { return }
 
-            if let _language {
-                free(_language) // Free previous reference since we're creating a new one
+            if let oldPointerIndex = stringPointers.firstIndex(where: { $0 == whisperParams.language }) {
+                stringPointers.remove(at: oldPointerIndex) // stringPointers willSet takes care of freeing
             }
 
-            self._language = pointer
+            stringPointers.append(pointer)
             whisperParams.language = UnsafePointer(pointer)
         }
     }
-
 }
 
 public struct Segment {
