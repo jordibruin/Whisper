@@ -90,6 +90,7 @@ public class Whisper {
     public var delegate: WhisperDelegate?
     public var params: WhisperParams
 
+    internal var isRunning = false
     private var retainedSelf: Unmanaged<Whisper>? {
         willSet {
             guard let retainedSelf else { return }
@@ -126,6 +127,7 @@ public class Whisper {
         // All user data can share the same retained self for simplicity
         params.new_segment_callback_user_data = opaqueSelf
         params.progress_callback_user_data = opaqueSelf
+        params.encoder_begin_callback_user_data = opaqueSelf
 
         params.new_segment_callback = { (ctx: OpaquePointer?, newSegmentCount: Int32, userData: UnsafeMutableRawPointer?) in
             guard let ctx, let userData else { return }
@@ -164,9 +166,18 @@ public class Whisper {
                 delegate.whisper(whisper, didUpdateProgress: progress)
             }
         }
+
+        params.encoder_begin_callback = { (ctx: OpaquePointer?, userData: UnsafeMutableRawPointer?) -> Bool in
+            guard let userData else { return true }
+            let whisper = Unmanaged<Whisper>.fromOpaque(userData).takeUnretainedValue()
+
+            return whisper.isRunning
+        }
     }
 
     public func transcribe(audioFrames: [Float], completionHandler: @escaping (Result<[Segment], Error>) -> Void) {
+        isRunning = true
+
         DispatchQueue.global(qos: .userInitiated).async { [unowned self] in
 
             whisper_full(whisperContext, params.whisperParams, audioFrames, Int32(audioFrames.count))
@@ -195,6 +206,10 @@ public class Whisper {
                 completionHandler(.success(segments))
             }
         }
+    }
+
+    public func stop() {
+        isRunning = false
     }
 
     @available(iOS 13, macOS 10.15, *)
