@@ -82,9 +82,19 @@ public class Whisper {
     public var delegate: WhisperDelegate?
     public var params: WhisperParams
 
+    private var retainedSelf: Unmanaged<Whisper>? {
+        willSet {
+            guard let retainedSelf else { return }
+
+            retainedSelf.release() // Clear out old reference
+        }
+    }
+
     public init(fromFileURL fileURL: URL, withParams params: WhisperParams = .default) {
         self.whisperContext = fileURL.relativePath.withCString { whisper_init_from_file($0) }
         self.params = params
+
+        self.setupCallbacks()
     }
 
     public init(fromData data: Data, withParams params: WhisperParams = .default) {
@@ -92,13 +102,23 @@ public class Whisper {
 
         self.whisperContext = copy.withUnsafeMutableBytes { whisper_init_from_buffer($0.baseAddress!, data.count) }
         self.params = params
+
+        self.setupCallbacks()
     }
 
     deinit {
         whisper_free(whisperContext)
     }
 
-    public func transcribe(audioFrames: [Float], completionHandler: @escaping (Result<[Segment], Error>) -> Void) {
+    private func setupCallbacks() {
+        let retainedSelf = Unmanaged.passRetained(self)
+        self.retainedSelf = retainedSelf
+        let opaqueSelf = retainedSelf.toOpaque()
+
+        // All user data can share the same retained self for simplicity
+        params.new_segment_callback_user_data = opaqueSelf
+        params.progress_callback_user_data = opaqueSelf
+
         params.new_segment_callback = { (ctx: OpaquePointer?, newSegmentCount: Int32, userData: UnsafeMutableRawPointer?) in
             guard let ctx, let userData else { return }
             let whisper = Unmanaged<Whisper>.fromOpaque(userData).takeUnretainedValue()
@@ -126,7 +146,6 @@ public class Whisper {
                 delegate.whisper(whisper, didProcessNewSegments: newSegments, atIndex: Int(startIndex))
             }
         }
-        params.new_segment_callback_user_data = Unmanaged.passRetained(self).toOpaque()
 
         params.progress_callback = { (ctx: OpaquePointer?, progress: Float, userData: UnsafeMutableRawPointer?) in
             guard let userData else { return }
@@ -137,8 +156,9 @@ public class Whisper {
                 delegate.whisper(whisper, didUpdateProgress: progress)
             }
         }
-        params.progress_callback_user_data = Unmanaged.passRetained(self).toOpaque()
+    }
 
+    public func transcribe(audioFrames: [Float], completionHandler: @escaping (Result<[Segment], Error>) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async { [unowned self] in
 
             whisper_full(whisperContext, params.whisperParams, audioFrames, Int32(audioFrames.count))
