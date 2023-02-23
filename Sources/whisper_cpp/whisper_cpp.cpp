@@ -509,7 +509,7 @@ struct whisper_context {
     std::vector<float> energy; // PCM signal energy
 
     // [EXPERIMENTAL] speed-up techniques
-    int32_t exp_n_audio_ctx; // 0 - use default
+    int32_t exp_n_audio_ctx = 0; // 0 - use default
 };
 
 template<typename T>
