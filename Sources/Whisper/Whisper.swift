@@ -16,6 +16,9 @@ public class WhisperParams {
     public init(strategy: WhisperSamplingStrategy = .greedy) {
         self.whisperParams = whisper_full_default_params(whisper_sampling_strategy(rawValue: strategy.rawValue))
         self.language = .auto
+        
+        let maxThreads = max(1, min(8, ProcessInfo.processInfo.processorCount - 2))
+        self.n_threads = Int32(maxThreads)
     }
 
     deinit {
