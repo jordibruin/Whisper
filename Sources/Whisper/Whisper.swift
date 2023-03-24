@@ -28,7 +28,8 @@ public class WhisperParams {
         
         let maxThreads = max(1, min(8, ProcessInfo.processInfo.processorCount - 2))
         self.n_threads = Int32(maxThreads)
-        self.max_len = 1
+        
+        whisperParams.max_len = 1
     }
 
     deinit {
