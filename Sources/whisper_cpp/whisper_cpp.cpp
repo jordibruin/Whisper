@@ -3353,7 +3353,8 @@ int whisper_full(
         while (progress_cur >= progress_prev + progress_step) {
             progress_prev += progress_step;
             if (params.print_progress) {
-                fprintf(stderr, "%s: progress = %3d%%\n", __func__, progress_prev);
+                // commented out to clean up console log
+//                 fprintf(stderr, "%s: progress = %3d%%\n", __func__, progress_prev);
             }
         }
 
