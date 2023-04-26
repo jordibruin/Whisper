@@ -6,6 +6,10 @@ public enum WhisperSamplingStrategy: UInt32 {
     case beamSearch
 }
 
+public enum Error: Swift.Error {
+    case whisperIsTornDown
+}
+
 @dynamicMemberLookup
 public class WhisperParams {
     public static let `default` = WhisperParams(strategy: .greedy)
@@ -96,6 +100,8 @@ public class Whisper {
     public var params: WhisperParams
 
     internal var isRunning = false
+    private  var isTornDown = false
+
     private var retainedSelf: Unmanaged<Whisper>? {
         willSet {
             guard let retainedSelf else { return }
@@ -118,6 +124,11 @@ public class Whisper {
         self.params = params
 
         self.setupCallbacks()
+    }
+
+    public func tearDown() {
+        retainedSelf = nil
+        isTornDown = true
     }
 
     deinit {
@@ -181,6 +192,11 @@ public class Whisper {
     }
 
     public func transcribe(audioFrames: [Float], completionHandler: @escaping (Result<[Segment], Error>) -> Void) {
+        guard !isTornDown else {
+            completionHandler(.failure(Error.whisperIsTornDown))
+            return
+        }
+        
         isRunning = true
 
         DispatchQueue.global(qos: .userInitiated).async { [unowned self] in
@@ -219,6 +235,8 @@ public class Whisper {
 
     @available(iOS 13, macOS 10.15, *)
     public func transcribe(audioFrames: [Float]) async throws -> [Segment] {
+        guard !isTornDown else { throw Error.whisperIsTornDown }
+
         return try await withCheckedThrowingContinuation { cont in
             self.transcribe(audioFrames: audioFrames) { result in
                 switch result {
